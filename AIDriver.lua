@@ -303,7 +303,7 @@ function AIDriver:driveCourse(dt)
 	if not self:hasTipTrigger() then
 		self:setSpeed(self:getRecordedSpeed())
 	end
-	
+
 	if self:getIsInFilltrigger() then
 		self:setSpeed(self.vehicle.cp.speeds.approach)
 	end
@@ -311,6 +311,12 @@ function AIDriver:driveCourse(dt)
 	-- slow down before wait points
 	if self.course:hasWaitPointAround(self.ppc:getCurrentOriginalWaypointIx(), 1, 2) then
 		self:setSpeed(self.vehicle.cp.speeds.turn)
+	end
+
+	self:stopEngineIfNotNeeded()
+
+	if self:getSpeed() > 0 and self.allowedToDrive then
+		self:startEngineIfNeeded()
 	end
 
 	if isReverseActive then
@@ -511,6 +517,9 @@ end
 -- speed set in this loop.
 function AIDriver:setSpeed(speed)
 	self.speed = math.min(self.speed, speed)
+	if self.speed > 0 then
+		self.lastMovingTime = self.vehicle.timer
+	end
 end
 
 --- Reset drive controls at the end of each loop
@@ -995,5 +1004,23 @@ function AIDriver:updateOffset()
 		self.ppc:setOffset(self.vehicle.cp.loadUnloadOffsetX, self.vehicle.cp.loadUnloadOffsetZ)
 	else
 		self.ppc:setOffset(0, 0)
+	end
+end
+
+function AIDriver:startEngineIfNeeded()
+	if self.vehicle.spec_motorized and not self.vehicle.spec_motorized.isMotorStarted then
+		self.vehicle:startMotor()
+	end
+end
+
+--- Check the engine state and stop if we have the fuel save option and been stopped too long
+function AIDriver:stopEngineIfNotNeeded()
+	if self.vehicle.cp.saveFuelOptionActive then
+		if self.vehicle.timer - (self.lastMovingTime or math.huge) > 30000 then
+			if self.vehicle.spec_motorized and self.vehicle.spec_motorized.isMotorStarted then
+				self:debug('Been stopped for more than 30 seconds, stopping engine. %d %d', self.vehicle.timer, (self.lastMovingTime or math.huge))
+				self.vehicle:stopMotor()
+			end
+		end
 	end
 end
